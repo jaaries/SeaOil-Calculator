@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Summary</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    .summary-box {
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 20px;
+      max-width: 400px;
+      background-color: #f2f2f2;
+    }
+    h2 {
+      margin-top: 0;
+    }
+    p {
+      font-size: 18px;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="summary-box">
+    <h2>Summary</h2>
+    <p><strong>Ex97 Total:</strong> <span id="sumEx97"></span></p>
+    <p><strong>Ex97 Price:</strong> <span id="sumEx97Price"></span></p>
+    <p><strong>Ex91 Total:</strong> <span id="sumEx91"></span></p>
+    <p><strong>Ex91 Price:</strong> <span id="sumEx91Price"></span></p>
+    <p><strong>DSL Total:</strong> <span id="sumDSL"></span></p>
+    <p><strong>DSL Price:</strong> <span id="sumDSLPrice"></span></p>
+  </div>
+
+  <script>
+    const data = JSON.parse(localStorage.getItem("summaryData")) || {};
+
+    document.getElementById("sumEx97").textContent = data.ex97?.total ?? "0";
+    document.getElementById("sumEx97Price").textContent = data.ex97?.price ?? "0";
+    document.getElementById("sumEx91").textContent = data.ex91?.total ?? "0";
+    document.getElementById("sumEx91Price").textContent = data.ex91?.price ?? "0";
+    document.getElementById("sumDSL").textContent = data.dsl?.total ?? "0";
+    document.getElementById("sumDSLPrice").textContent = data.dsl?.price ?? "0";
+  </script>
+</body>
+</html>
