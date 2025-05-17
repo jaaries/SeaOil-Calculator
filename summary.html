@@ -34,6 +34,9 @@
     <p><strong>DSL Total:</strong> <span id="sumDSL"></span></p>
     <p><strong>DSL Price:</strong> <span id="sumDSLPrice"></span></p>
   </div>
+    <div id="sumEx97"></div>
+    <div id="sumEx91"></div>
+    <div id="sumDsl"></div>
 
   <script>
     const data = JSON.parse(localStorage.getItem("summaryData")) || {};
@@ -45,5 +48,21 @@
     document.getElementById("sumDSL").textContent = data.dsl?.total ?? "0";
     document.getElementById("sumDSLPrice").textContent = data.dsl?.price ?? "0";
   </script>
+
+  <script>
+  window.onload = function () {
+    const storedData = localStorage.getItem("summaryData");
+    if (storedData) {
+      const data = JSON.parse(storedData);
+      
+      document.getElementById("sumEx97").textContent = `Total: ${data.ex97.total}, Price: ${data.ex97.price}`;
+      document.getElementById("sumEx91").textContent = `Total: ${data.ex91.total}, Price: ${data.ex91.price}`;
+      document.getElementById("sumDsl").textContent = `Total: ${data.dsl.total}, Price: ${data.dsl.price}`;
+    } else {
+      console.warn("No summary data found in localStorage.");
+    }
+  }
+</script>
+
 </body>
 </html>
