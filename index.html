@@ -7,119 +7,263 @@
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@2.1.5/dist/tesseract.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body { font-family: Arial; padding: 20px; background: #f9f9f9; }
-    h2 { margin-top: 30px; }
-    input[type='number'] { width: 100%; padding: 6px; margin-bottom: 10px; font-size: 1em; }
-    button, .scan-btn { margin: 5px; padding: 8px 12px; font-size: 0.9em; cursor: pointer; }
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f4f4f4; }
+    h1, h2, h3 { margin-top: 30px; }
+    input[type='number'] { width: 100%; padding: 6px; margin: 5px 0; font-size: 1em; }
+    button, .scan-btn { margin: 5px 10px 5px 0; padding: 8px 12px; font-size: 1em; cursor: pointer; }
     .scan-btn-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
-    .ocr-preview { margin: 10px 0; max-width: 100%; }
-    label span { cursor: pointer; margin-left: 5px; color: blue; }
-    .preview-container { margin: 10px 0; }
+    .ocr-preview, video { max-width: 100%; margin-top: 10px; border-radius: 5px; }
     .summary-table { width: 100%; border-collapse: collapse; margin-top: 30px; }
     .summary-table th, .summary-table td { border: 1px solid #ccc; padding: 8px; text-align: center; }
     .summary-table th { background-color: #eee; }
-    canvas { max-width: 100%; margin-top: 20px; }
     .input-block { margin-bottom: 15px; }
-    #status { font-style: italic; margin-top: 10px; }
+    #status { margin-top: 10px; font-style: italic; color: #444; }
   </style>
 </head>
 <body>
-  <h1>Scan Readings and Summary</h1>
-
+  <h1>Reading Tracker with OCR</h1>
   <div id="status"></div>
 
-  <!-- OCR Input Sections (Previous, Current) -->
-  <!-- ... same as before ... -->
+  <h2>Previous Readings</h2>
+
+  <div id="prev-section"></div>
+
+  <h2>Current Readings</h2>
+  <div id="curr-section"></div>
+
+  <h2>Enter Cost Per Unit (₱)</h2>
+  <label>Ex97: <input type="number" id="price_ex97" step="0.0001"></label><br>
+  <label>Ex91: <input type="number" id="price_ex91" step="0.0001"></label><br>
+  <label>DSL: <input type="number" id="price_dsl" step="0.0001"></label><br>
+
+  <h2>Detailed Breakdown</h2>
+  <div id="breakdown"></div>
+
+  <h2>Summary Table</h2>
+  <table class="summary-table" id="summaryTable">
+    <thead>
+      <tr>
+        <th>Batch</th>
+        <th>Previous</th>
+        <th>Current</th>
+        <th>Difference</th>
+        <th>Cost</th>
+      </tr>
+    </thead>
+    <tbody id="summaryBody"></tbody>
+  </table>
+
+  <canvas id="summaryChart" height="200"></canvas>
+  <br>
+  <button onclick="resetAll()">Reset All Data</button>
 
   <video id="video" width="320" height="240" autoplay muted style="display:none;"></video>
   <canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
   <img id="imagePreview" class="ocr-preview" src="" alt="Scanned preview" style="display:none;">
 
   <script>
+    const batches = ['ex97', 'ex91', 'dsl'];
+
+    function createInputSection(batch, isPrevious) {
+      const section = document.createElement('div');
+      section.innerHTML = `
+        <h3>${batch.toUpperCase()} (${isPrevious ? 'Previous' : 'Current'})</h3>
+        ${isPrevious ? `
+        <div class="scan-btn-row">
+          <button class="scan-btn" onclick="startCameraOCR('prev_${batch}')">📷 Scan 4 via Camera</button>
+          <label class="scan-btn">
+            🖼️ Upload Image
+            <input type="file" accept="image/*" onchange="uploadImageOCR(event, 'prev_${batch}')" style="display:none">
+          </label>
+        </div>` : ''}
+        <div class="input-block">
+          ${[1, 2, 3, 4].map(i => `
+            <label>${batch.toUpperCase()} #${i} ${!isPrevious ? `<span onclick=\"scanSingleField('${batch}_${i}')\">📷</span>` : ''}</label>
+            <input type="number" id="${isPrevious ? 'prev' : 'curr'}_${batch}_${i}" step="0.0001">
+          `).join('')}
+        </div>`;
+      return section;
+    }
+
+    window.onload = function () {
+      batches.forEach(batch => {
+        document.getElementById('prev-section').appendChild(createInputSection(batch, true));
+        document.getElementById('curr-section').appendChild(createInputSection(batch, false));
+      });
+
+      document.querySelectorAll("input[type='number']").forEach(input => {
+        input.addEventListener("input", () => {
+          saveToLocalStorage();
+          updateSummaryAndChart();
+        });
+      });
+
+      loadFromLocalStorage();
+      updateSummaryAndChart();
+    };
+
+    function saveToLocalStorage() {
+      batches.forEach(batch => {
+        for (let i = 1; i <= 4; i++) {
+          localStorage.setItem(`prev_${batch}_${i}`, document.getElementById(`prev_${batch}_${i}`).value);
+          localStorage.setItem(`curr_${batch}_${i}`, document.getElementById(`curr_${batch}_${i}`).value);
+        }
+        localStorage.setItem(`price_${batch}`, document.getElementById(`price_${batch}`).value);
+      });
+    }
+
+    function loadFromLocalStorage() {
+      batches.forEach(batch => {
+        for (let i = 1; i <= 4; i++) {
+          document.getElementById(`prev_${batch}_${i}`).value = localStorage.getItem(`prev_${batch}_${i}`) || '';
+          document.getElementById(`curr_${batch}_${i}`).value = localStorage.getItem(`curr_${batch}_${i}`) || '';
+        }
+        document.getElementById(`price_${batch}`).value = localStorage.getItem(`price_${batch}`) || '';
+      });
+    }
+
+    function updateSummaryAndChart() {
+      const summaryBody = document.getElementById("summaryBody");
+      const breakdown = document.getElementById("breakdown");
+      summaryBody.innerHTML = "";
+      breakdown.innerHTML = "";
+      const labels = [];
+      const diffs = [];
+      let grandTotal = 0;
+
+      batches.forEach(batch => {
+        let prevTotal = 0, currTotal = 0, totalCost = 0;
+        let breakdownHTML = `<h3>${batch.toUpperCase()}</h3><ul>`;
+
+        for (let i = 1; i <= 4; i++) {
+          const prev = parseFloat(document.getElementById(`prev_${batch}_${i}`).value) || 0;
+          const curr = parseFloat(document.getElementById(`curr_${batch}_${i}`).value) || 0;
+          const price = parseFloat(document.getElementById(`price_${batch}`).value) || 0;
+          const diff = curr - prev;
+          const cost = diff * price;
+          prevTotal += prev;
+          currTotal += curr;
+          totalCost += cost;
+
+          breakdownHTML += `<li>(${i}) ${curr} - ${prev} = ${diff.toFixed(4)} × ₱${price.toFixed(4)} = ₱${cost.toFixed(4)}</li>`;
+        }
+
+        breakdownHTML += `</ul><strong>Total Cost: ₱${totalCost.toFixed(4)}</strong>`;
+        breakdown.innerHTML += breakdownHTML;
+
+        const diffTotal = currTotal - prevTotal;
+        grandTotal += totalCost;
+        labels.push(batch.toUpperCase());
+        diffs.push(diffTotal.toFixed(4));
+
+        summaryBody.innerHTML += `
+          <tr>
+            <td>${batch.toUpperCase()}</td>
+            <td>${prevTotal.toFixed(4)}</td>
+            <td>${currTotal.toFixed(4)}</td>
+            <td>${diffTotal.toFixed(4)}</td>
+            <td>₱${totalCost.toFixed(4)}</td>
+          </tr>
+        `;
+      });
+
+      breakdown.innerHTML += `<h3>Grand Total: ₱${grandTotal.toFixed(4)}</h3>`;
+
+      new Chart(document.getElementById("summaryChart"), {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [{
+            label: "Total Difference per Batch",
+            data: diffs,
+            backgroundColor: ["#4caf50", "#2196f3", "#ff9800"]
+          }]
+        },
+        options: { responsive: true, scales: { y: { beginAtZero: true } } }
+      });
+    }
+
+    function resetAll() {
+      if (confirm("Are you sure you want to clear all data?")) {
+        localStorage.clear();
+        location.reload();
+      }
+    }
+
     async function startCameraOCR(batchPrefix) {
       const status = document.getElementById("status");
-      status.innerText = "Opening camera...";
-
       const video = document.getElementById("video");
       const canvas = document.getElementById("canvas");
-      const context = canvas.getContext("2d");
-      const imagePreview = document.getElementById("imagePreview");
+      const ctx = canvas.getContext("2d");
+      const preview = document.getElementById("imagePreview");
 
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         video.srcObject = stream;
         video.style.display = "block";
+        status.innerText = "Tap video to scan";
 
-        status.innerText = "Position the values in front of the camera and tap to capture.";
-
-        // Wait for user to tap to capture
         video.onclick = async () => {
-          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           const dataURL = canvas.toDataURL();
-          imagePreview.src = dataURL;
-          imagePreview.style.display = "block";
+          preview.src = dataURL;
+          preview.style.display = "block";
           video.style.display = "none";
-          status.innerText = "Scanning image...";
-
-          // Stop camera
-          const tracks = stream.getTracks();
-          tracks.forEach(track => track.stop());
+          status.innerText = "Scanning...";
+          stream.getTracks().forEach(t => t.stop());
 
           const result = await Tesseract.recognize(dataURL, 'eng');
-          const text = result.data.text;
-          const numbers = text.match(/[0-9]+(\.[0-9]+)?/g);
+          const nums = result.data.text.match(/[0-9]+(\.[0-9]+)?/g);
 
-          if (numbers && numbers.length >= 4) {
+          if (nums && nums.length >= 4) {
             for (let i = 0; i < 4; i++) {
               const field = document.getElementById(`${batchPrefix}_${i + 1}`);
-              if (field) field.value = parseFloat(numbers[i]).toFixed(4);
+              if (field) field.value = parseFloat(nums[i]).toFixed(4);
             }
+            saveToLocalStorage();
+            updateSummaryAndChart();
             status.innerText = "Scan successful!";
           } else {
             status.innerText = "Could not detect 4 numbers. Try again.";
           }
         };
+
       } catch (err) {
-        status.innerText = "Camera access failed: " + err.message;
+        status.innerText = "Camera error: " + err.message;
       }
     }
 
     async function scanSingleField(fieldId) {
       const status = document.getElementById("status");
-      status.innerText = "Opening camera for " + fieldId;
-
       const video = document.getElementById("video");
       const canvas = document.getElementById("canvas");
-      const context = canvas.getContext("2d");
-      const imagePreview = document.getElementById("imagePreview");
+      const ctx = canvas.getContext("2d");
+      const preview = document.getElementById("imagePreview");
 
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         video.srcObject = stream;
         video.style.display = "block";
-
-        status.innerText = "Tap camera to scan value...";
+        status.innerText = "Tap to scan";
 
         video.onclick = async () => {
-          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           const dataURL = canvas.toDataURL();
-          imagePreview.src = dataURL;
-          imagePreview.style.display = "block";
+          preview.src = dataURL;
+          preview.style.display = "block";
           video.style.display = "none";
+          stream.getTracks().forEach(t => t.stop());
 
-          const tracks = stream.getTracks();
-          tracks.forEach(track => track.stop());
-
-          status.innerText = "Reading number...";
           const result = await Tesseract.recognize(dataURL, 'eng');
-          const text = result.data.text;
-          const number = text.match(/[0-9]+(\.[0-9]+)?/);
+          const match = result.data.text.match(/[0-9]+(\.[0-9]+)?/);
 
-          if (number) {
-            document.getElementById(fieldId).value = parseFloat(number[0]).toFixed(4);
+          if (match) {
+            document.getElementById(fieldId).value = parseFloat(match[0]).toFixed(4);
+            saveToLocalStorage();
+            updateSummaryAndChart();
             status.innerText = "Scan successful!";
           } else {
-            status.innerText = "No number found. Please try again.";
+            status.innerText = "No number detected. Try again.";
           }
         };
 
@@ -133,24 +277,25 @@
       const reader = new FileReader();
       const status = document.getElementById("status");
 
-      reader.onload = async function () {
+      reader.onload = async () => {
         const image = reader.result;
         document.getElementById("imagePreview").src = image;
         document.getElementById("imagePreview").style.display = "block";
-        status.innerText = "Processing uploaded image...";
+        status.innerText = "Processing image...";
 
         const result = await Tesseract.recognize(image, 'eng');
-        const text = result.data.text;
-        const numbers = text.match(/[0-9]+(\.[0-9]+)?/g);
+        const nums = result.data.text.match(/[0-9]+(\.[0-9]+)?/g);
 
-        if (numbers && numbers.length >= 4) {
+        if (nums && nums.length >= 4) {
           for (let i = 0; i < 4; i++) {
             const field = document.getElementById(`${batchPrefix}_${i + 1}`);
-            if (field) field.value = parseFloat(numbers[i]).toFixed(4);
+            if (field) field.value = parseFloat(nums[i]).toFixed(4);
           }
-          status.innerText = "Upload and OCR successful!";
+          saveToLocalStorage();
+          updateSummaryAndChart();
+          status.innerText = "Image scan successful!";
         } else {
-          status.innerText = "OCR failed to detect 4 numbers. Try another image.";
+          status.innerText = "Could not detect 4 numbers.";
         }
       };
 
