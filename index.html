@@ -1,31 +1,69 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Reading Tracker with OCR</title>
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@2.1.5/dist/tesseract.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reading Tracker with Voice Input</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; background: #f4f4f4; }
-    h1, h2, h3 { margin-top: 30px; }
-    input[type='number'] { width: 100%; padding: 6px; margin: 5px 0; font-size: 1em; }
-    button, .scan-btn { margin: 5px 10px 5px 0; padding: 8px 12px; font-size: 1em; cursor: pointer; }
-    .scan-btn-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
-    .ocr-preview, video { max-width: 100%; margin-top: 10px; border-radius: 5px; }
-    .summary-table { width: 100%; border-collapse: collapse; margin-top: 30px; }
-    .summary-table th, .summary-table td { border: 1px solid #ccc; padding: 8px; text-align: center; }
-    .summary-table th { background-color: #eee; }
-    .input-block { margin-bottom: 15px; }
-    #status { margin-top: 10px; font-style: italic; color: #444; }
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f4f4f4;
+    }
+    h1, h2, h3 {
+      margin-top: 30px;
+    }
+    input[type='number'] {
+      width: calc(100% - 60px);
+      padding: 6px;
+      margin: 5px 0;
+      font-size: 1em;
+    }
+    button, .mic-btn {
+      margin: 5px 10px 5px 0;
+      padding: 8px 12px;
+      font-size: 1em;
+      cursor: pointer;
+    }
+    .mic-btn {
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+    }
+    .summary-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 30px;
+    }
+    .summary-table th, .summary-table td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: center;
+    }
+    .summary-table th {
+      background-color: #eee;
+    }
+    .input-block {
+      margin-bottom: 15px;
+    }
+    .input-row {
+      display: flex;
+      align-items: center;
+    }
+    #status {
+      margin-top: 10px;
+      font-style: italic;
+      color: #444;
+    }
   </style>
 </head>
 <body>
-  <h1>Reading Tracker with OCR</h1>
+  <h1>Reading Tracker with Voice Input</h1>
   <div id="status"></div>
 
   <h2>Previous Readings</h2>
-
   <div id="prev-section"></div>
 
   <h2>Current Readings</h2>
@@ -57,10 +95,6 @@
   <br>
   <button onclick="resetAll()">Reset All Data</button>
 
-  <video id="video" width="320" height="240" autoplay muted style="display:none;"></video>
-  <canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
-  <img id="imagePreview" class="ocr-preview" src="" alt="Scanned preview" style="display:none;">
-
   <script>
     const batches = ['ex97', 'ex91', 'dsl'];
 
@@ -68,19 +102,12 @@
       const section = document.createElement('div');
       section.innerHTML = `
         <h3>${batch.toUpperCase()} (${isPrevious ? 'Previous' : 'Current'})</h3>
-        ${isPrevious ? `
-        <div class="scan-btn-row">
-          <button class="scan-btn" onclick="startCameraOCR('prev_${batch}')">📷 Scan 4 via Camera</button>
-          <label class="scan-btn">
-            🖼️ Upload Image
-            <input type="file" accept="image/*" onchange="uploadImageOCR(event, 'prev_${batch}')" style="display:none">
-          </label>
-        </div>` : ''}
         <div class="input-block">
           ${[1, 2, 3, 4].map(i => `
-            <label>${batch.toUpperCase()} #${i} ${!isPrevious ? `<span onclick=\"scanSingleField('${batch}_${i}')\">📷</span>` : ''}</label>
-            <input type="number" id="${isPrevious ? 'prev' : 'curr'}_${batch}_${i}" step="0.0001">
-          `).join('')}
+            <div class="input-row">
+              <input type="number" id="${isPrevious ? 'prev' : 'curr'}_${batch}_${i}" step="0.0001">
+              <button class="mic-btn" onclick="startVoiceInput('${isPrevious ? 'prev' : 'curr'}_${batch}_${i}')">🎤</button>
+            </div>`).join('')}
         </div>`;
       return section;
     }
@@ -190,116 +217,37 @@
       }
     }
 
-    async function startCameraOCR(batchPrefix) {
+    function startVoiceInput(inputId) {
       const status = document.getElementById("status");
-      const video = document.getElementById("video");
-      const canvas = document.getElementById("canvas");
-      const ctx = canvas.getContext("2d");
-      const preview = document.getElementById("imagePreview");
-
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        video.srcObject = stream;
-        video.style.display = "block";
-        status.innerText = "Tap video to scan";
-
-        video.onclick = async () => {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const dataURL = canvas.toDataURL();
-          preview.src = dataURL;
-          preview.style.display = "block";
-          video.style.display = "none";
-          status.innerText = "Scanning...";
-          stream.getTracks().forEach(t => t.stop());
-
-          const result = await Tesseract.recognize(dataURL, 'eng');
-          const nums = result.data.text.match(/[0-9]+(\.[0-9]+)?/g);
-
-          if (nums && nums.length >= 4) {
-            for (let i = 0; i < 4; i++) {
-              const field = document.getElementById(`${batchPrefix}_${i + 1}`);
-              if (field) field.value = parseFloat(nums[i]).toFixed(4);
-            }
-            saveToLocalStorage();
-            updateSummaryAndChart();
-            status.innerText = "Scan successful!";
-          } else {
-            status.innerText = "Could not detect 4 numbers. Try again.";
-          }
-        };
-
-      } catch (err) {
-        status.innerText = "Camera error: " + err.message;
+      if (!('webkitSpeechRecognition' in window)) {
+        status.innerText = "Speech Recognition not supported in this browser.";
+        return;
       }
-    }
 
-    async function scanSingleField(fieldId) {
-      const status = document.getElementById("status");
-      const video = document.getElementById("video");
-      const canvas = document.getElementById("canvas");
-      const ctx = canvas.getContext("2d");
-      const preview = document.getElementById("imagePreview");
+      const recognition = new webkitSpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
 
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        video.srcObject = stream;
-        video.style.display = "block";
-        status.innerText = "Tap to scan";
+      status.innerText = `Listening for input in ${inputId}...`;
+      recognition.start();
 
-        video.onclick = async () => {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const dataURL = canvas.toDataURL();
-          preview.src = dataURL;
-          preview.style.display = "block";
-          video.style.display = "none";
-          stream.getTracks().forEach(t => t.stop());
-
-          const result = await Tesseract.recognize(dataURL, 'eng');
-          const match = result.data.text.match(/[0-9]+(\.[0-9]+)?/);
-
-          if (match) {
-            document.getElementById(fieldId).value = parseFloat(match[0]).toFixed(4);
-            saveToLocalStorage();
-            updateSummaryAndChart();
-            status.innerText = "Scan successful!";
-          } else {
-            status.innerText = "No number detected. Try again.";
-          }
-        };
-
-      } catch (err) {
-        status.innerText = "Camera error: " + err.message;
-      }
-    }
-
-    function uploadImageOCR(event, batchPrefix) {
-      const file = event.target.files[0];
-      const reader = new FileReader();
-      const status = document.getElementById("status");
-
-      reader.onload = async () => {
-        const image = reader.result;
-        document.getElementById("imagePreview").src = image;
-        document.getElementById("imagePreview").style.display = "block";
-        status.innerText = "Processing image...";
-
-        const result = await Tesseract.recognize(image, 'eng');
-        const nums = result.data.text.match(/[0-9]+(\.[0-9]+)?/g);
-
-        if (nums && nums.length >= 4) {
-          for (let i = 0; i < 4; i++) {
-            const field = document.getElementById(`${batchPrefix}_${i + 1}`);
-            if (field) field.value = parseFloat(nums[i]).toFixed(4);
-          }
+      recognition.onresult = function (event) {
+        const speechResult = event.results[0][0].transcript;
+        const number = parseFloat(speechResult.replace(/[^0-9\.]/g, ''));
+        if (!isNaN(number)) {
+          document.getElementById(inputId).value = number.toFixed(4);
           saveToLocalStorage();
           updateSummaryAndChart();
-          status.innerText = "Image scan successful!";
+          status.innerText = `Recognized: ${number.toFixed(4)}`;
         } else {
-          status.innerText = "Could not detect 4 numbers.";
+          status.innerText = `Could not recognize a number. Try again.`;
         }
       };
 
-      if (file) reader.readAsDataURL(file);
+      recognition.onerror = function (event) {
+        status.innerText = `Error occurred: ${event.error}`;
+      };
     }
   </script>
 </body>
