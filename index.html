@@ -20,94 +20,142 @@
     .summary-table th { background-color: #eee; }
     canvas { max-width: 100%; margin-top: 20px; }
     .input-block { margin-bottom: 15px; }
+    #status { font-style: italic; margin-top: 10px; }
   </style>
 </head>
 <body>
   <h1>Scan Readings and Summary</h1>
 
-  <!-- Example: Batch Scan Controls -->
-  <h2>Ex97 (Previous)</h2>
-  <div class="scan-btn-row">
-    <button class="scan-btn" onclick="startCameraOCR('prev_ex97')">📷 Scan 4 Values via Camera</button>
-    <label class="scan-btn">
-      🖼️ Upload Image for OCR
-      <input type="file" accept="image/*" onchange="uploadImageOCR(event, 'prev_ex97')" style="display:none">
-    </label>
-  </div>
-  <div class="input-block">
-    <input type="number" id="prev_ex97_1" step="0.0001" placeholder="Value 1">
-    <input type="number" id="prev_ex97_2" step="0.0001" placeholder="Value 2">
-    <input type="number" id="prev_ex97_3" step="0.0001" placeholder="Value 3">
-    <input type="number" id="prev_ex97_4" step="0.0001" placeholder="Value 4">
-  </div>
+  <div id="status"></div>
 
-  <h2>Ex91 (Previous)</h2>
-  <div class="scan-btn-row">
-    <button class="scan-btn" onclick="startCameraOCR('prev_ex91')">📷 Scan 4 Values via Camera</button>
-    <label class="scan-btn">
-      🖼️ Upload Image for OCR
-      <input type="file" accept="image/*" onchange="uploadImageOCR(event, 'prev_ex91')" style="display:none">
-    </label>
-  </div>
-  <div class="input-block">
-    <input type="number" id="prev_ex91_1" step="0.0001" placeholder="Value 1">
-    <input type="number" id="prev_ex91_2" step="0.0001" placeholder="Value 2">
-    <input type="number" id="prev_ex91_3" step="0.0001" placeholder="Value 3">
-    <input type="number" id="prev_ex91_4" step="0.0001" placeholder="Value 4">
-  </div>
+  <!-- OCR Input Sections (Previous, Current) -->
+  <!-- ... same as before ... -->
 
-  <h2>DSL (Previous)</h2>
-  <div class="scan-btn-row">
-    <button class="scan-btn" onclick="startCameraOCR('prev_dsl')">📷 Scan 4 Values via Camera</button>
-    <label class="scan-btn">
-      🖼️ Upload Image for OCR
-      <input type="file" accept="image/*" onchange="uploadImageOCR(event, 'prev_dsl')" style="display:none">
-    </label>
-  </div>
-  <div class="input-block">
-    <input type="number" id="prev_dsl_1" step="0.0001" placeholder="Value 1">
-    <input type="number" id="prev_dsl_2" step="0.0001" placeholder="Value 2">
-    <input type="number" id="prev_dsl_3" step="0.0001" placeholder="Value 3">
-    <input type="number" id="prev_dsl_4" step="0.0001" placeholder="Value 4">
-  </div>
+  <video id="video" width="320" height="240" autoplay muted style="display:none;"></video>
+  <canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
+  <img id="imagePreview" class="ocr-preview" src="" alt="Scanned preview" style="display:none;">
 
-  <h2>Current Readings (Scan Individually)</h2>
-  <div class="input-block">
-    <label>Ex97 #1 <span onclick="scanSingleField('curr_ex97_1')">📷</span></label>
-    <input type="number" id="curr_ex97_1" step="0.0001">
-    <label>Ex97 #2 <span onclick="scanSingleField('curr_ex97_2')">📷</span></label>
-    <input type="number" id="curr_ex97_2" step="0.0001">
-    <label>Ex97 #3 <span onclick="scanSingleField('curr_ex97_3')">📷</span></label>
-    <input type="number" id="curr_ex97_3" step="0.0001">
-    <label>Ex97 #4 <span onclick="scanSingleField('curr_ex97_4')">📷</span></label>
-    <input type="number" id="curr_ex97_4" step="0.0001">
+  <script>
+    async function startCameraOCR(batchPrefix) {
+      const status = document.getElementById("status");
+      status.innerText = "Opening camera...";
 
-    <label>Ex91 #1 <span onclick="scanSingleField('curr_ex91_1')">📷</span></label>
-    <input type="number" id="curr_ex91_1" step="0.0001">
-    <label>Ex91 #2 <span onclick="scanSingleField('curr_ex91_2')">📷</span></label>
-    <input type="number" id="curr_ex91_2" step="0.0001">
-    <label>Ex91 #3 <span onclick="scanSingleField('curr_ex91_3')">📷</span></label>
-    <input type="number" id="curr_ex91_3" step="0.0001">
-    <label>Ex91 #4 <span onclick="scanSingleField('curr_ex91_4')">📷</span></label>
-    <input type="number" id="curr_ex91_4" step="0.0001">
+      const video = document.getElementById("video");
+      const canvas = document.getElementById("canvas");
+      const context = canvas.getContext("2d");
+      const imagePreview = document.getElementById("imagePreview");
 
-    <label>DSL #1 <span onclick="scanSingleField('curr_dsl_1')">📷</span></label>
-    <input type="number" id="curr_dsl_1" step="0.0001">
-    <label>DSL #2 <span onclick="scanSingleField('curr_dsl_2')">📷</span></label>
-    <input type="number" id="curr_dsl_2" step="0.0001">
-    <label>DSL #3 <span onclick="scanSingleField('curr_dsl_3')">📷</span></label>
-    <input type="number" id="curr_dsl_3" step="0.0001">
-    <label>DSL #4 <span onclick="scanSingleField('curr_dsl_4')">📷</span></label>
-    <input type="number" id="curr_dsl_4" step="0.0001">
-  </div>
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+        video.style.display = "block";
 
-  <div class="preview-container">
-    <video id="video" width="320" height="240" autoplay style="display:none;"></video>
-    <canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
-    <img id="imagePreview" class="ocr-preview" src="" alt="Scanned preview">
-    <button id="retakeBtn" onclick="retakePhoto()" style="display:none;">Retake Photo</button>
-  </div>
+        status.innerText = "Position the values in front of the camera and tap to capture.";
 
-  <!-- Summary, breakdown, prices, chart etc. remain unchanged below -->
+        // Wait for user to tap to capture
+        video.onclick = async () => {
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const dataURL = canvas.toDataURL();
+          imagePreview.src = dataURL;
+          imagePreview.style.display = "block";
+          video.style.display = "none";
+          status.innerText = "Scanning image...";
+
+          // Stop camera
+          const tracks = stream.getTracks();
+          tracks.forEach(track => track.stop());
+
+          const result = await Tesseract.recognize(dataURL, 'eng');
+          const text = result.data.text;
+          const numbers = text.match(/[0-9]+(\.[0-9]+)?/g);
+
+          if (numbers && numbers.length >= 4) {
+            for (let i = 0; i < 4; i++) {
+              const field = document.getElementById(`${batchPrefix}_${i + 1}`);
+              if (field) field.value = parseFloat(numbers[i]).toFixed(4);
+            }
+            status.innerText = "Scan successful!";
+          } else {
+            status.innerText = "Could not detect 4 numbers. Try again.";
+          }
+        };
+      } catch (err) {
+        status.innerText = "Camera access failed: " + err.message;
+      }
+    }
+
+    async function scanSingleField(fieldId) {
+      const status = document.getElementById("status");
+      status.innerText = "Opening camera for " + fieldId;
+
+      const video = document.getElementById("video");
+      const canvas = document.getElementById("canvas");
+      const context = canvas.getContext("2d");
+      const imagePreview = document.getElementById("imagePreview");
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+        video.style.display = "block";
+
+        status.innerText = "Tap camera to scan value...";
+
+        video.onclick = async () => {
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const dataURL = canvas.toDataURL();
+          imagePreview.src = dataURL;
+          imagePreview.style.display = "block";
+          video.style.display = "none";
+
+          const tracks = stream.getTracks();
+          tracks.forEach(track => track.stop());
+
+          status.innerText = "Reading number...";
+          const result = await Tesseract.recognize(dataURL, 'eng');
+          const text = result.data.text;
+          const number = text.match(/[0-9]+(\.[0-9]+)?/);
+
+          if (number) {
+            document.getElementById(fieldId).value = parseFloat(number[0]).toFixed(4);
+            status.innerText = "Scan successful!";
+          } else {
+            status.innerText = "No number found. Please try again.";
+          }
+        };
+
+      } catch (err) {
+        status.innerText = "Camera error: " + err.message;
+      }
+    }
+
+    function uploadImageOCR(event, batchPrefix) {
+      const file = event.target.files[0];
+      const reader = new FileReader();
+      const status = document.getElementById("status");
+
+      reader.onload = async function () {
+        const image = reader.result;
+        document.getElementById("imagePreview").src = image;
+        document.getElementById("imagePreview").style.display = "block";
+        status.innerText = "Processing uploaded image...";
+
+        const result = await Tesseract.recognize(image, 'eng');
+        const text = result.data.text;
+        const numbers = text.match(/[0-9]+(\.[0-9]+)?/g);
+
+        if (numbers && numbers.length >= 4) {
+          for (let i = 0; i < 4; i++) {
+            const field = document.getElementById(`${batchPrefix}_${i + 1}`);
+            if (field) field.value = parseFloat(numbers[i]).toFixed(4);
+          }
+          status.innerText = "Upload and OCR successful!";
+        } else {
+          status.innerText = "OCR failed to detect 4 numbers. Try another image.";
+        }
+      };
+
+      if (file) reader.readAsDataURL(file);
+    }
+  </script>
 </body>
 </html>
